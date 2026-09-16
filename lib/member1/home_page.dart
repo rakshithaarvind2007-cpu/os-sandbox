@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'module_placeholder_page.dart';
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -22,16 +24,11 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             const Text(
               'Learn and visualize Operating System algorithms',
-              style: TextStyle(
-                fontSize: 16,
-              ),
+              style: TextStyle(fontSize: 16),
             ),
-
             const SizedBox(height: 30),
 
             const Text(
@@ -41,7 +38,6 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
 
             _buildModuleCard(
@@ -51,10 +47,14 @@ class HomePage extends StatelessWidget {
                   'FCFS, SJF, Priority, Round Robin and SRTF',
               icon: Icons.memory,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'CPU Scheduling module will be connected soon.',
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const ModulePlaceholderPage(
+                      title: 'CPU Scheduling',
+                      description:
+                          'FCFS, SJF, Priority, Round Robin and SRTF',
                     ),
                   ),
                 );
@@ -70,7 +70,6 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
 
             _buildModuleCard(
@@ -80,10 +79,14 @@ class HomePage extends StatelessWidget {
                   'FIFO, LRU and Optimal Page Replacement',
               icon: Icons.layers,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Page Replacement module will be connected soon.',
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const ModulePlaceholderPage(
+                      title: 'Page Replacement',
+                      description:
+                          'FIFO, LRU and Optimal Page Replacement',
                     ),
                   ),
                 );
@@ -112,12 +115,11 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 12),
 
             _buildModuleCard(
-  context,
-  title: 'Deadlock',
-  description:
-      "Banker's Algorithm",
-  icon: Icons.lock,
-  onTap: () {
+              context,
+              title: 'Deadlock',
+              description: "Banker's Algorithm",
+              icon: Icons.lock,
+              onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
@@ -137,7 +139,6 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
 
             _buildModuleCard(
@@ -182,9 +183,7 @@ class HomePage extends StatelessWidget {
                 icon,
                 size: 40,
               ),
-
               const SizedBox(width: 18),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -197,9 +196,7 @@ class HomePage extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 6),
-
                     Text(
                       description,
                       style: const TextStyle(
@@ -209,7 +206,6 @@ class HomePage extends StatelessWidget {
                   ],
                 ),
               ),
-
               const Icon(
                 Icons.arrow_forward_ios,
                 size: 18,
