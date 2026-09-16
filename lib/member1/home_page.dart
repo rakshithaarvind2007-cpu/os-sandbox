@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-
 import 'module_placeholder_page.dart';
+import '../member3/memory/memory_page.dart';
+import '../member3/deadlock/deadlock_page.dart';
+import '../member3/disk/disk_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -8,10 +10,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('OS Sandbox'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('OS Sandbox'), centerTitle: true),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -19,10 +18,7 @@ class HomePage extends StatelessWidget {
           children: [
             const Text(
               'Operating System Simulator',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -33,28 +29,22 @@ class HomePage extends StatelessWidget {
 
             const Text(
               'CPU Scheduling',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             _buildModuleCard(
               context,
               title: 'CPU Scheduling',
-              description:
-                  'FCFS, SJF, Priority, Round Robin and SRTF',
+              description: 'FCFS, SJF, Priority, Round Robin and SRTF',
               icon: Icons.memory,
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        const ModulePlaceholderPage(
+                    builder: (context) => const ModulePlaceholderPage(
                       title: 'CPU Scheduling',
-                      description:
-                          'FCFS, SJF, Priority, Round Robin and SRTF',
+                      description: 'FCFS, SJF, Priority, Round Robin and SRTF',
                     ),
                   ),
                 );
@@ -65,28 +55,22 @@ class HomePage extends StatelessWidget {
 
             const Text(
               'Memory & Process Management',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             _buildModuleCard(
               context,
               title: 'Page Replacement',
-              description:
-                  'FIFO, LRU and Optimal Page Replacement',
+              description: 'FIFO, LRU and Optimal Page Replacement',
               icon: Icons.layers,
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        const ModulePlaceholderPage(
+                    builder: (context) => const ModulePlaceholderPage(
                       title: 'Page Replacement',
-                      description:
-                          'FIFO, LRU and Optimal Page Replacement',
+                      description: 'FIFO, LRU and Optimal Page Replacement',
                     ),
                   ),
                 );
@@ -98,16 +82,12 @@ class HomePage extends StatelessWidget {
             _buildModuleCard(
               context,
               title: 'Memory Management',
-              description:
-                  'First Fit, Best Fit and Worst Fit',
+              description: 'First Fit, Best Fit and Worst Fit',
               icon: Icons.storage,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Memory Management module will be connected soon.',
-                    ),
-                  ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MemoryPage()),
                 );
               },
             ),
@@ -120,12 +100,9 @@ class HomePage extends StatelessWidget {
               description: "Banker's Algorithm",
               icon: Icons.lock,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Deadlock module will be connected soon.',
-                    ),
-                  ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const DeadlockPage()),
                 );
               },
             ),
@@ -134,25 +111,20 @@ class HomePage extends StatelessWidget {
 
             const Text(
               'Disk Scheduling',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             _buildModuleCard(
               context,
               title: 'Disk Scheduling',
-              description:
-                  'FCFS, SSTF, SCAN, C-SCAN, LOOK and C-LOOK',
+              description: 'FCFS, SSTF, SCAN, C-SCAN, LOOK and C-LOOK',
               icon: Icons.album,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Disk Scheduling module will be connected soon.',
-                    ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DiskPage(),
                   ),
                 );
               },
@@ -179,15 +151,11 @@ class HomePage extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 40,
-              ),
+              Icon(icon, size: 40),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
@@ -197,19 +165,11 @@ class HomePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        fontSize: 14,
-                      ),
-                    ),
+                    Text(description, style: const TextStyle(fontSize: 14)),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 18,
-              ),
+              const Icon(Icons.arrow_forward_ios, size: 18),
             ],
           ),
         ),
