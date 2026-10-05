@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'disk_algorithms.dart';
 
 class DiskPage extends StatefulWidget {
@@ -26,6 +27,8 @@ class _DiskPageState extends State<DiskPage> {
 
   DiskResult? result;
   String? errorMessage;
+  int parsedHead = 53;
+  int parsedDiskSize = 200;
 
   final List<String> algorithms = [
     'FCFS',
@@ -123,6 +126,8 @@ class _DiskPageState extends State<DiskPage> {
       }
 
       setState(() {
+        parsedHead = head;
+        parsedDiskSize = diskSize;
         result = calculatedResult;
       });
     } catch (e) {
@@ -157,7 +162,7 @@ class _DiskPageState extends State<DiskPage> {
         selectedAlgorithm == 'C-LOOK';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Disk Scheduling')),
+      appBar: AppBar(title: const Text('Disk Scheduling Visualizer')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -167,33 +172,25 @@ class _DiskPageState extends State<DiskPage> {
               'Disk Scheduling Simulator',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 20),
-
             buildInputField(
               label: 'Request Queue',
               controller: requestsController,
               hint: 'Example: 98, 183, 37, 122',
             ),
-
             const SizedBox(height: 16),
-
             buildInputField(
               label: 'Initial Head Position',
               controller: headController,
               hint: 'Example: 53',
             ),
-
             const SizedBox(height: 16),
-
             buildInputField(
-              label: 'Disk Size',
+              label: 'Disk Size (Cylinders)',
               controller: diskSizeController,
               hint: 'Example: 200',
             ),
-
             const SizedBox(height: 16),
-
             DropdownButtonFormField<String>(
               initialValue: selectedAlgorithm,
               decoration: const InputDecoration(
@@ -207,15 +204,15 @@ class _DiskPageState extends State<DiskPage> {
                 );
               }).toList(),
               onChanged: (value) {
-                setState(() {
-                  selectedAlgorithm = value!;
-                  result = null;
-                });
+                if (value != null) {
+                  setState(() {
+                    selectedAlgorithm = value;
+                    result = null;
+                  });
+                }
               },
             ),
-
             const SizedBox(height: 16),
-
             if (needsDirection)
               DropdownButtonFormField<String>(
                 initialValue: selectedDirection,
@@ -228,15 +225,15 @@ class _DiskPageState extends State<DiskPage> {
                   DropdownMenuItem(value: 'Left', child: Text('Left')),
                 ],
                 onChanged: (value) {
-                  setState(() {
-                    selectedDirection = value!;
-                    result = null;
-                  });
+                  if (value != null) {
+                    setState(() {
+                      selectedDirection = value;
+                      result = null;
+                    });
+                  }
                 },
               ),
-
             const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -247,30 +244,58 @@ class _DiskPageState extends State<DiskPage> {
                 ),
               ),
             ),
-
             if (errorMessage != null) ...[
               const SizedBox(height: 20),
               Card(
+                color: Colors.red.shade50,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 16),
+                    style: TextStyle(color: Colors.red.shade900, fontSize: 16),
                   ),
                 ),
               ),
             ],
-
             if (result != null) ...[
               const SizedBox(height: 24),
-
               const Text(
-                'Result',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                'Head Trajectory Visualization',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 12),
-
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 220,
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: CustomPaint(
+                          painter: DiskTrajectoryPainter(
+                            head: parsedHead,
+                            order: result!.order,
+                            diskSize: parsedDiskSize,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('0', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                          Text('Cylinders (0 to ${parsedDiskSize - 1})', style: TextStyle(color: Colors.grey.shade700)),
+                          Text('${parsedDiskSize - 1}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -278,38 +303,26 @@ class _DiskPageState extends State<DiskPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Service Order',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'Service Sequence',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-
                       const SizedBox(height: 8),
-
                       Text(
-                        '${headController.text} → '
-                        '${result!.order.join(' → ')}',
-                        style: const TextStyle(fontSize: 16),
+                        '$parsedHead → ${result!.order.join(' → ')}',
+                        style: const TextStyle(fontSize: 15),
                       ),
-
-                      const SizedBox(height: 20),
-
+                      const SizedBox(height: 16),
                       const Text(
                         'Total Head Movement',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-
-                      const SizedBox(height: 8),
-
+                      const SizedBox(height: 4),
                       Text(
                         '${result!.totalHeadMovement} cylinders',
-                        style: const TextStyle(
-                          fontSize: 20,
+                        style: TextStyle(
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
                         ),
                       ),
                     ],
@@ -329,5 +342,72 @@ class _DiskPageState extends State<DiskPage> {
     headController.dispose();
     diskSizeController.dispose();
     super.dispose();
+  }
+}
+
+class DiskTrajectoryPainter extends CustomPainter {
+  final int head;
+  final List<int> order;
+  final int diskSize;
+
+  DiskTrajectoryPainter({
+    required this.head,
+    required this.order,
+    required this.diskSize,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final List<int> points = [head, ...order];
+    if (points.length < 2) return;
+
+    final Paint axisPaint = Paint()
+      ..color = Colors.grey.shade400
+      ..strokeWidth = 2;
+
+    final Paint linePaint = Paint()
+      ..color = Colors.blue.shade600
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+
+    final Paint nodePaint = Paint()
+      ..color = Colors.blue.shade800
+      ..style = PaintingStyle.fill;
+
+    final Paint startNodePaint = Paint()
+      ..color = Colors.green.shade600
+      ..style = PaintingStyle.fill;
+
+    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), axisPaint);
+
+    double xPos(int cylinder) => (cylinder / (diskSize - 1)) * size.width;
+    double yPos(int index) => (index / (points.length - 1)) * (size.height - 20) + 10;
+
+    final Path path = Path();
+    path.moveTo(xPos(points[0]), yPos(0));
+
+    for (int i = 1; i < points.length; i++) {
+      path.lineTo(xPos(points[i]), yPos(i));
+    }
+
+    canvas.drawPath(path, linePaint);
+
+    for (int i = 0; i < points.length; i++) {
+      final double x = xPos(points[i]);
+      final double y = yPos(i);
+
+      canvas.drawCircle(
+        Offset(x, y),
+        i == 0 ? 6 : 4,
+        i == 0 ? startNodePaint : nodePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant DiskTrajectoryPainter oldDelegate) {
+    return oldDelegate.head != head ||
+        oldDelegate.order != order ||
+        oldDelegate.diskSize != diskSize;
   }
 }

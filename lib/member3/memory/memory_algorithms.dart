@@ -1,94 +1,224 @@
-class MemoryAllocationResult {
-  final List<int> allocation;
-  final List<int> remainingBlocks;
+class BlockSegment {
+  final String label; // Process ID or 'Free' or 'Internal Frag'
+  final int size;
+  final bool isAllocated;
+  final bool isFragmented;
 
-  MemoryAllocationResult({
-    required this.allocation,
-    required this.remainingBlocks,
+  BlockSegment({
+    required this.label,
+    required this.size,
+    required this.isAllocated,
+    this.isFragmented = false,
   });
 }
 
-MemoryAllocationResult firstFit(
-  List<int> blocks,
-  List<int> processes,
-) {
+class MemoryBlockState {
+  final int originalSize;
+  final List<BlockSegment> segments;
+
+  MemoryBlockState({
+    required this.originalSize,
+    required this.segments,
+  });
+}
+
+class MemoryAllocationResult {
+  final List<MemoryBlockState> blocks;
+  final List<int> unallocatedProcesses;
+
+  MemoryAllocationResult({
+    required this.blocks,
+    required this.unallocatedProcesses,
+  });
+}
+
+// FIRST FIT
+MemoryAllocationResult firstFit(List<int> blocks, List<int> processes) {
   List<int> remaining = List.from(blocks);
-  List<int> allocation = List.filled(processes.length, -1);
+  List<List<BlockSegment>> blockSegments = List.generate(
+    blocks.length,
+    (i) => [],
+  );
+  List<int> unallocated = [];
 
   for (int i = 0; i < processes.length; i++) {
+    int pSize = processes[i];
+    bool allocated = false;
+
     for (int j = 0; j < remaining.length; j++) {
-      if (remaining[j] >= processes[i]) {
-        allocation[i] = j;
-        remaining[j] -= processes[i];
+      if (remaining[j] >= pSize) {
+        blockSegments[j].add(BlockSegment(
+          label: 'P${i + 1} ($pSize)',
+          size: pSize,
+          isAllocated: true,
+        ));
+        remaining[j] -= pSize;
+        allocated = true;
         break;
       }
     }
+
+    if (!allocated) {
+      unallocated.add(i + 1);
+    }
+  }
+
+  // Construct final memory block states
+  List<MemoryBlockState> finalBlocks = [];
+  for (int i = 0; i < blocks.length; i++) {
+    List<BlockSegment> segs = List.from(blockSegments[i]);
+    if (remaining[i] > 0) {
+      if (segs.isNotEmpty) {
+        segs.add(BlockSegment(
+          label: 'Frag (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+          isFragmented: true,
+        ));
+      } else {
+        segs.add(BlockSegment(
+          label: 'Free (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+        ));
+      }
+    }
+    finalBlocks.add(MemoryBlockState(
+      originalSize: blocks[i],
+      segments: segs,
+    ));
   }
 
   return MemoryAllocationResult(
-    allocation: allocation,
-    remainingBlocks: remaining,
+    blocks: finalBlocks,
+    unallocatedProcesses: unallocated,
   );
 }
 
-MemoryAllocationResult bestFit(
-  List<int> blocks,
-  List<int> processes,
-) {
+// BEST FIT
+MemoryAllocationResult bestFit(List<int> blocks, List<int> processes) {
   List<int> remaining = List.from(blocks);
-  List<int> allocation = List.filled(processes.length, -1);
+  List<List<BlockSegment>> blockSegments = List.generate(
+    blocks.length,
+    (i) => [],
+  );
+  List<int> unallocated = [];
 
   for (int i = 0; i < processes.length; i++) {
+    int pSize = processes[i];
     int bestIndex = -1;
 
     for (int j = 0; j < remaining.length; j++) {
-      if (remaining[j] >= processes[i]) {
-        if (bestIndex == -1 ||
-            remaining[j] < remaining[bestIndex]) {
+      if (remaining[j] >= pSize) {
+        if (bestIndex == -1 || remaining[j] < remaining[bestIndex]) {
           bestIndex = j;
         }
       }
     }
 
     if (bestIndex != -1) {
-      allocation[i] = bestIndex;
-      remaining[bestIndex] -= processes[i];
+      blockSegments[bestIndex].add(BlockSegment(
+        label: 'P${i + 1} ($pSize)',
+        size: pSize,
+        isAllocated: true,
+      ));
+      remaining[bestIndex] -= pSize;
+    } else {
+      unallocated.add(i + 1);
     }
   }
 
+  List<MemoryBlockState> finalBlocks = [];
+  for (int i = 0; i < blocks.length; i++) {
+    List<BlockSegment> segs = List.from(blockSegments[i]);
+    if (remaining[i] > 0) {
+      if (segs.isNotEmpty) {
+        segs.add(BlockSegment(
+          label: 'Frag (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+          isFragmented: true,
+        ));
+      } else {
+        segs.add(BlockSegment(
+          label: 'Free (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+        ));
+      }
+    }
+    finalBlocks.add(MemoryBlockState(
+      originalSize: blocks[i],
+      segments: segs,
+    ));
+  }
+
   return MemoryAllocationResult(
-    allocation: allocation,
-    remainingBlocks: remaining,
+    blocks: finalBlocks,
+    unallocatedProcesses: unallocated,
   );
 }
 
-MemoryAllocationResult worstFit(
-  List<int> blocks,
-  List<int> processes,
-) {
+// WORST FIT
+MemoryAllocationResult worstFit(List<int> blocks, List<int> processes) {
   List<int> remaining = List.from(blocks);
-  List<int> allocation = List.filled(processes.length, -1);
+  List<List<BlockSegment>> blockSegments = List.generate(
+    blocks.length,
+    (i) => [],
+  );
+  List<int> unallocated = [];
 
   for (int i = 0; i < processes.length; i++) {
+    int pSize = processes[i];
     int worstIndex = -1;
 
     for (int j = 0; j < remaining.length; j++) {
-      if (remaining[j] >= processes[i]) {
-        if (worstIndex == -1 ||
-            remaining[j] > remaining[worstIndex]) {
+      if (remaining[j] >= pSize) {
+        if (worstIndex == -1 || remaining[j] > remaining[worstIndex]) {
           worstIndex = j;
         }
       }
     }
 
     if (worstIndex != -1) {
-      allocation[i] = worstIndex;
-      remaining[worstIndex] -= processes[i];
+      blockSegments[worstIndex].add(BlockSegment(
+        label: 'P${i + 1} ($pSize)',
+        size: pSize,
+        isAllocated: true,
+      ));
+      remaining[worstIndex] -= pSize;
+    } else {
+      unallocated.add(i + 1);
     }
   }
 
+  List<MemoryBlockState> finalBlocks = [];
+  for (int i = 0; i < blocks.length; i++) {
+    List<BlockSegment> segs = List.from(blockSegments[i]);
+    if (remaining[i] > 0) {
+      if (segs.isNotEmpty) {
+        segs.add(BlockSegment(
+          label: 'Frag (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+          isFragmented: true,
+        ));
+      } else {
+        segs.add(BlockSegment(
+          label: 'Free (${remaining[i]})',
+          size: remaining[i],
+          isAllocated: false,
+        ));
+      }
+    }
+    finalBlocks.add(MemoryBlockState(
+      originalSize: blocks[i],
+      segments: segs,
+    ));
+  }
+
   return MemoryAllocationResult(
-    allocation: allocation,
-    remainingBlocks: remaining,
+    blocks: finalBlocks,
+    unallocatedProcesses: unallocated,
   );
 }
