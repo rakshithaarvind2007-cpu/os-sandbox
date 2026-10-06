@@ -196,7 +196,6 @@ class _DeadlockPageState extends State<DeadlockPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // System Status Card
         Card(
           color: isSafe ? Colors.green.shade50 : Colors.red.shade50,
           elevation: 2,
@@ -239,8 +238,6 @@ class _DeadlockPageState extends State<DeadlockPage> {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Safe Sequence Timeline Visualizer
         if (isSafe) ...[
           const Text(
             'Execution Safe Sequence',
@@ -285,8 +282,6 @@ class _DeadlockPageState extends State<DeadlockPage> {
           ),
           const SizedBox(height: 24),
         ],
-
-        // Need Matrix Table
         const Text(
           'Computed Need Matrix [Max - Allocation]',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -300,7 +295,9 @@ class _DeadlockPageState extends State<DeadlockPage> {
               border: TableBorder.all(color: Colors.grey.shade300, width: 1),
               children: [
                 TableRow(
-                  backgroundColor: Colors.grey.shade100,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                  ),
                   children: [
                     const Padding(
                       padding: EdgeInsets.all(8.0),
