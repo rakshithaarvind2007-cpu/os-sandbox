@@ -15,7 +15,11 @@ class OSSandboxApp extends StatelessWidget {
     return MaterialApp(
       title: 'OS Sandbox',
       debugShowCheckedModeBanner: false,
+
+      // Apply the shared Member 1 design system.
       theme: AppTheme.lightTheme,
+
+      // Open the dashboard when the app starts.
       home: const HomePage(),
     );
   }
