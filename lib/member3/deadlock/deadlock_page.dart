@@ -110,9 +110,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Banker's Algorithm Simulator"),
-      ),
+      appBar: AppBar(title: const Text("Banker's Algorithm Simulator")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -120,15 +118,10 @@ class _DeadlockPageState extends State<DeadlockPage> {
           children: [
             const Text(
               'Allocation Matrix',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Separate processes with ; and resources with spaces.',
-            ),
+            const Text('Separate processes with ; and resources with spaces.'),
             const SizedBox(height: 8),
             TextField(
               controller: allocationController,
@@ -141,10 +134,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
             const SizedBox(height: 20),
             const Text(
               'Maximum Matrix',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -158,10 +148,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
             const SizedBox(height: 20),
             const Text(
               'Available Resources',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -178,7 +165,10 @@ class _DeadlockPageState extends State<DeadlockPage> {
                 onPressed: runBankersAlgorithm,
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Run Safety Algorithm', style: TextStyle(fontSize: 16)),
+                  child: Text(
+                    'Run Safety Algorithm',
+                    style: TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
             ),
@@ -215,11 +205,15 @@ class _DeadlockPageState extends State<DeadlockPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isSafe ? 'System Status: SAFE' : 'System Status: DEADLOCK / UNSAFE',
+                        isSafe
+                            ? 'System Status: SAFE'
+                            : 'System Status: DEADLOCK / UNSAFE',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: isSafe ? Colors.green.shade900 : Colors.red.shade900,
+                          color: isSafe
+                              ? Colors.green.shade900
+                              : Colors.red.shade900,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -228,7 +222,9 @@ class _DeadlockPageState extends State<DeadlockPage> {
                             ? 'A safe execution sequence exists to prevent deadlock.'
                             : 'The current resource allocation cannot guarantee process completion.',
                         style: TextStyle(
-                          color: isSafe ? Colors.green.shade800 : Colors.red.shade800,
+                          color: isSafe
+                              ? Colors.green.shade800
+                              : Colors.red.shade800,
                         ),
                       ),
                     ],
@@ -259,7 +255,10 @@ class _DeadlockPageState extends State<DeadlockPage> {
                         backgroundColor: Colors.blue.shade700,
                         child: Text(
                           '${index + 1}',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                       label: Text(
@@ -267,7 +266,10 @@ class _DeadlockPageState extends State<DeadlockPage> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       backgroundColor: Colors.blue.shade50,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                     ),
                     if (index < result!.safeSequence.length - 1)
                       Padding(
@@ -300,11 +302,14 @@ class _DeadlockPageState extends State<DeadlockPage> {
               border: TableBorder.all(color: Colors.grey.shade300, width: 1),
               children: [
                 TableRow(
-                  backgroundColor: Colors.grey.shade100,
+                  decoration: BoxDecoration(color: Colors.grey.shade100),
                   children: [
                     const Padding(
                       padding: EdgeInsets.all(8.0),
-                      child: Text('Process', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        'Process',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                     ...List.generate(
                       result!.need.isNotEmpty ? result!.need[0].length : 0,
@@ -332,10 +337,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
                       ...result!.need[pIndex].map(
                         (val) => Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            '$val',
-                            textAlign: TextAlign.center,
-                          ),
+                          child: Text('$val', textAlign: TextAlign.center),
                         ),
                       ),
                     ],
