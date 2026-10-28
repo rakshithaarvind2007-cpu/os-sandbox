@@ -343,7 +343,7 @@ class _HomePageState extends State<HomePage>
               padding: const EdgeInsets.only(right: 28),
               child: Center(
                 child: Text(
-                  'OS SANDBOX  •  TEAM OF 3',
+                  'OS SANDBOX  •  INTERACTIVE LAB',
                   style: TextStyle(
                     letterSpacing: 1.15,
                     fontSize: 10,

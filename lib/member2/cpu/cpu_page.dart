@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../member1/app_theme.dart';
 import 'cpu_algorithms.dart';
@@ -17,54 +18,82 @@ class _CpuPageState extends State<CpuPage> {
   SchedulingResult? _result;
   List<_Block> _blocks = [];
   String? _error;
+  int _revealedBlocks = 0;
+  Timer? _timelineTimer;
   static const _algorithms = ['FCFS', 'SJF', 'SRTF', 'Priority', 'Round Robin'];
   @override
   void dispose() {
+    _timelineTimer?.cancel();
     _input.dispose();
     _quantum.dispose();
     super.dispose();
   }
 
   void _run() {
+    _timelineTimer?.cancel();
     try {
-      final processes = _input.text
+      final entries = _input.text
           .split(',')
-          .where((s) => s.trim().isNotEmpty)
-          .map((entry) {
-            final values = entry
-                .trim()
-                .split(':')
-                .map((e) => e.trim())
-                .toList();
-            if (values.length < 3 || values.length > 4)
-              throw FormatException(
-                'Use PID:arrival:burst:priority for each process.',
-              );
-            final arrival = int.parse(values[1]);
-            final burst = int.parse(values[2]);
-            final priority = values.length == 4 ? int.parse(values[3]) : 1;
-            if (arrival < 0 || burst <= 0 || priority < 0)
-              throw FormatException(
-                'Arrival and priority must be 0 or greater; burst must be above 0.',
-              );
-            return Process(
-              id: values[0],
-              arrivalTime: arrival,
-              burstTime: burst,
-              priority: priority,
-            );
-          })
+          .map((entry) => entry.trim())
           .toList();
-      if (processes.isEmpty) throw FormatException('Add at least one process.');
-      if (processes.map((p) => p.id).toSet().length != processes.length)
-        throw FormatException('Process IDs must be unique.');
-      final q = int.tryParse(_quantum.text) ?? 0;
+      if (entries.isEmpty || entries.any((entry) => entry.isEmpty)) {
+        throw const FormatException('Enter processes separated by commas.');
+      }
+      if (entries.length > 10)
+        throw const FormatException('Use at most 10 processes in one run.');
+      final processes = <Process>[];
+      for (final entry in entries) {
+        final values = entry.split(':').map((value) => value.trim()).toList();
+        if (values.length != 3 && values.length != 4) {
+          throw const FormatException(
+            'Use PID:arrival:burst:priority for each process. Priority is optional.',
+          );
+        }
+        final id = values[0];
+        if (!RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,7}$').hasMatch(id)) {
+          throw const FormatException(
+            'Process IDs must start with a letter and use up to 8 letters, digits, _ or -.',
+          );
+        }
+        final arrival = int.tryParse(values[1]);
+        final burst = int.tryParse(values[2]);
+        final priority = values.length == 4 ? int.tryParse(values[3]) : 1;
+        if (arrival == null || burst == null || priority == null) {
+          throw FormatException(
+            '$id: arrival, burst, and priority must be whole numbers.',
+          );
+        }
+        if (arrival < 0 || arrival > 100000)
+          throw FormatException('$id: arrival time must be from 0 to 100,000.');
+        if (burst <= 0 || burst > 10000)
+          throw FormatException('$id: burst time must be from 1 to 10,000.');
+        if (priority < 0 || priority > 100000)
+          throw FormatException('$id: priority must be from 0 to 100,000.');
+        processes.add(
+          Process(
+            id: id,
+            arrivalTime: arrival,
+            burstTime: burst,
+            priority: priority,
+          ),
+        );
+      }
+      if (processes.map((p) => p.id.toLowerCase()).toSet().length !=
+          processes.length) {
+        throw const FormatException('Each process ID must be unique.');
+      }
+      final q = int.tryParse(_quantum.text.trim());
+      if (_algorithm == 'Round Robin' && (q == null || q <= 0)) {
+        throw const FormatException(
+          'Round Robin time quantum must be a positive whole number.',
+        );
+      }
       final result = switch (_algorithm) {
         'FCFS' => fcfs(processes),
         'SJF' => sjf(processes),
         'SRTF' => srtf(processes),
         'Priority' => priorityScheduling(processes),
-        _ => roundRobin(processes, q),
+        _ => roundRobin(processes, q!),
       };
       final byId = {for (final p in processes) p.id: p};
       final remain = {for (final p in processes) p.id: p.burstTime};
@@ -73,21 +102,15 @@ class _CpuPageState extends State<CpuPage> {
       for (final id in result.executionOrder) {
         final p = byId[id]!;
         if (_algorithm == 'SRTF') {
-          final nextArrival = processes
-              .where((x) => x.arrivalTime > time)
-              .map((x) => x.arrivalTime)
-              .fold<int?>(null, (a, b) => a == null || b < a ? b : a);
           if (remain[id] == p.burstTime && time < p.arrivalTime)
             time = p.arrivalTime;
-          final duration = 1;
-          _appendBlock(blocks, id, time, duration);
-          remain[id] = remain[id]! - duration;
-          time += duration;
-          if (nextArrival != null && time < nextArrival && remain[id]! > 0) {}
+          _appendBlock(blocks, id, time, 1);
+          remain[id] = remain[id]! - 1;
+          time++;
         } else {
           if (time < p.arrivalTime) time = p.arrivalTime;
           final duration = _algorithm == 'Round Robin'
-              ? (remain[id]! < q ? remain[id]! : q)
+              ? (remain[id]! < q! ? remain[id]! : q!)
               : p.burstTime;
           _appendBlock(blocks, id, time, duration);
           time += duration;
@@ -97,13 +120,42 @@ class _CpuPageState extends State<CpuPage> {
       setState(() {
         _result = result;
         _blocks = blocks;
+        _revealedBlocks = 0;
         _error = null;
       });
-    } catch (e) {
-      setState(
-        () => _error = e.toString().replaceFirst('FormatException: ', ''),
-      );
+      _playTimeline();
+    } on FormatException catch (e) {
+      setState(() {
+        _result = null;
+        _blocks = [];
+        _error = e.message;
+      });
+    } catch (_) {
+      setState(() {
+        _result = null;
+        _blocks = [];
+        _error =
+            'Could not schedule these processes. Check the input values and try again.';
+      });
     }
+  }
+
+  void _playTimeline() {
+    _timelineTimer?.cancel();
+    if (_blocks.isEmpty) return;
+    setState(() => _revealedBlocks = 0);
+    _timelineTimer = Timer.periodic(const Duration(milliseconds: 520), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(
+        () => _revealedBlocks = (_revealedBlocks + 1)
+            .clamp(0, _blocks.length)
+            .toInt(),
+      );
+      if (_revealedBlocks >= _blocks.length) timer.cancel();
+    });
   }
 
   void _appendBlock(List<_Block> list, String id, int start, int duration) {
@@ -173,7 +225,7 @@ class _CpuPageState extends State<CpuPage> {
                             ),
                           ),
                         SizedBox(
-                          width: width < 650 ? double.infinity : 500,
+                          width: width < 650 ? width - 72 : 500,
                           child: TextField(
                             controller: _input,
                             decoration: const InputDecoration(
@@ -192,7 +244,7 @@ class _CpuPageState extends State<CpuPage> {
                     ),
                     const SizedBox(height: 9),
                     Text(
-                      'Format: PID:arrival:burst:priority  ·  Lower priority number runs first',
+                      'Format: PID:arrival:burst:priority  ·  Priority is optional; lower number runs first. Up to 10 processes.',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withValues(alpha: .48),
@@ -233,9 +285,23 @@ class _CpuPageState extends State<CpuPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _PanelTitle(
-                        'Execution timeline',
-                        'Each colored segment is a CPU dispatch.',
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: _PanelTitle(
+                              'Execution timeline',
+                              'Watch each process get its turn on the CPU.',
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _playTimeline,
+                            tooltip: 'Replay scheduling animation',
+                            icon: const Icon(
+                              Icons.replay_rounded,
+                              color: AppTheme.cyan,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 20),
                       SizedBox(
@@ -256,7 +322,7 @@ class _CpuPageState extends State<CpuPage> {
                                     color: Colors.white12,
                                   ),
                                 ),
-                                for (var i = 0; i < _blocks.length; i++)
+                                for (var i = 0; i < _revealedBlocks; i++)
                                   _TimelineSegment(
                                     block: _blocks[i],
                                     total: total,

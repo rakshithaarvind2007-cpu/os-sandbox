@@ -1,18 +1,17 @@
 class DiskResult {
   final List<int> order;
   final int totalHeadMovement;
+  final List<int> trajectory;
 
   DiskResult({
     required this.order,
     required this.totalHeadMovement,
-  });
+    List<int>? trajectory,
+  }) : trajectory = trajectory ?? order;
 }
 
 // FCFS - First Come First Serve
-DiskResult fcfs({
-  required List<int> requests,
-  required int head,
-}) {
+DiskResult fcfs({required List<int> requests, required int head}) {
   List<int> order = List.from(requests);
   int current = head;
   int totalMovement = 0;
@@ -22,17 +21,11 @@ DiskResult fcfs({
     current = request;
   }
 
-  return DiskResult(
-    order: order,
-    totalHeadMovement: totalMovement,
-  );
+  return DiskResult(order: order, totalHeadMovement: totalMovement);
 }
 
 // SSTF - Shortest Seek Time First
-DiskResult sstf({
-  required List<int> requests,
-  required int head,
-}) {
+DiskResult sstf({required List<int> requests, required int head}) {
   List<int> remaining = List.from(requests);
   List<int> order = [];
   int current = head;
@@ -59,10 +52,7 @@ DiskResult sstf({
     remaining.removeAt(closestIndex);
   }
 
-  return DiskResult(
-    order: order,
-    totalHeadMovement: totalMovement,
-  );
+  return DiskResult(order: order, totalHeadMovement: totalMovement);
 }
 
 // SCAN - Elevator Algorithm
@@ -72,65 +62,56 @@ DiskResult scan({
   required int diskSize,
   required String direction,
 }) {
-  List<int> lower = [];
-  List<int> higher = [];
-
-  for (int request in requests) {
-    if (request < head) {
-      lower.add(request);
-    } else {
-      higher.add(request);
-    }
-  }
-
-  lower.sort();
-  higher.sort();
-
-  List<int> order = [];
-  int current = head;
-  int totalMovement = 0;
+  final lower = requests.where((request) => request < head).toList()..sort();
+  final higher = requests.where((request) => request >= head).toList()..sort();
+  final order = <int>[];
+  final trajectory = <int>[];
+  var current = head;
+  var totalMovement = 0;
 
   if (direction == 'Right') {
-    for (int request in higher) {
+    for (final request in higher) {
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
-
     if (current != diskSize - 1) {
       totalMovement += (diskSize - 1 - current).abs();
       current = diskSize - 1;
+      trajectory.add(current);
     }
-
-    for (int i = lower.length - 1; i >= 0; i--) {
-      int request = lower[i];
+    for (var i = lower.length - 1; i >= 0; i--) {
+      final request = lower[i];
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
   } else {
-    for (int i = lower.length - 1; i >= 0; i--) {
-      int request = lower[i];
+    for (var i = lower.length - 1; i >= 0; i--) {
+      final request = lower[i];
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
-
     if (current != 0) {
-      totalMovement += current.abs();
+      totalMovement += current;
       current = 0;
+      trajectory.add(current);
     }
-
-    for (int request in higher) {
+    for (final request in higher) {
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
   }
-
   return DiskResult(
     order: order,
     totalHeadMovement: totalMovement,
+    trajectory: trajectory,
   );
 }
 
@@ -141,71 +122,62 @@ DiskResult cscan({
   required int diskSize,
   required String direction,
 }) {
-  List<int> lower = [];
-  List<int> higher = [];
-
-  for (int request in requests) {
-    if (request < head) {
-      lower.add(request);
-    } else {
-      higher.add(request);
-    }
-  }
-
-  lower.sort();
-  higher.sort();
-
-  List<int> order = [];
-  int current = head;
-  int totalMovement = 0;
+  final lower = requests.where((request) => request < head).toList()..sort();
+  final higher = requests.where((request) => request >= head).toList()..sort();
+  final order = <int>[];
+  final trajectory = <int>[];
+  var current = head;
+  var totalMovement = 0;
 
   if (direction == 'Right') {
-    for (int request in higher) {
+    for (final request in higher) {
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
-
     if (current != diskSize - 1) {
       totalMovement += (diskSize - 1 - current).abs();
       current = diskSize - 1;
+      trajectory.add(current);
     }
-
     totalMovement += diskSize - 1;
     current = 0;
-
-    for (int request in lower) {
+    trajectory.add(current);
+    for (final request in lower) {
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
   } else {
-    for (int i = lower.length - 1; i >= 0; i--) {
-      int request = lower[i];
+    for (var i = lower.length - 1; i >= 0; i--) {
+      final request = lower[i];
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
-
     if (current != 0) {
-      totalMovement += current.abs();
+      totalMovement += current;
       current = 0;
+      trajectory.add(current);
     }
-
     totalMovement += diskSize - 1;
     current = diskSize - 1;
-
-    for (int i = higher.length - 1; i >= 0; i--) {
-      int request = higher[i];
+    trajectory.add(current);
+    for (var i = higher.length - 1; i >= 0; i--) {
+      final request = higher[i];
       order.add(request);
+      trajectory.add(request);
       totalMovement += (request - current).abs();
       current = request;
     }
   }
-
   return DiskResult(
     order: order,
     totalHeadMovement: totalMovement,
+    trajectory: trajectory,
   );
 }
 
@@ -261,10 +233,7 @@ DiskResult look({
     }
   }
 
-  return DiskResult(
-    order: order,
-    totalHeadMovement: totalMovement,
-  );
+  return DiskResult(order: order, totalHeadMovement: totalMovement);
 }
 
 // C-LOOK
@@ -332,8 +301,5 @@ DiskResult clook({
     }
   }
 
-  return DiskResult(
-    order: order,
-    totalHeadMovement: totalMovement,
-  );
+  return DiskResult(order: order, totalHeadMovement: totalMovement);
 }

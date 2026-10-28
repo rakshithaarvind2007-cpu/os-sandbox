@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../member1/app_theme.dart';
 
@@ -15,26 +16,47 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
   String _algorithm = 'FIFO';
   _PageRun? _run;
   String? _error;
+  int _visibleSteps = 0;
+  Timer? _stepTimer;
 
   @override
   void dispose() {
+    _stepTimer?.cancel();
     _reference.dispose();
     _frames.dispose();
     super.dispose();
   }
 
   void _simulate() {
+    _stepTimer?.cancel();
     try {
-      final pages = _reference.text
-          .split(',')
-          .map((s) => int.parse(s.trim()))
-          .toList();
-      final count = int.parse(_frames.text.trim());
-      if (pages.isEmpty || count < 1 || count > 8 || pages.any((p) => p < 0)) {
+      final tokens = _reference.text.split(',').map((s) => s.trim()).toList();
+      if (_reference.text.trim().isEmpty || tokens.any((s) => s.isEmpty))
+        throw const FormatException('Enter page numbers separated by commas.');
+      if (tokens.length > 24)
         throw const FormatException(
-          'Use non-negative page numbers and between 1 and 8 frames.',
+          'Use at most 24 page requests for a clear walkthrough.',
         );
+      final pages = <int>[];
+      for (var i = 0; i < tokens.length; i++) {
+        final page = int.tryParse(tokens[i]);
+        if (page == null)
+          throw FormatException(
+            'Page request ${i + 1} must be a whole number.',
+          );
+        if (page < 0)
+          throw FormatException(
+            'Page numbers cannot be negative (request ${i + 1}).',
+          );
+        if (page > 999999)
+          throw FormatException('Page numbers must be 999,999 or less.');
+        pages.add(page);
       }
+      final count = int.tryParse(_frames.text.trim());
+      if (count == null || count < 1 || count > 8)
+        throw const FormatException(
+          'Frame count must be a whole number from 1 to 8.',
+        );
       final memory = <int>[];
       final lastUsed = <int, int>{};
       final snapshots = <List<int?>>[];
@@ -85,13 +107,42 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
       setState(() {
         _run = _PageRun(pages, snapshots, hitsByStep, faults, hits);
         _error = null;
+        _visibleSteps = 0;
       });
-    } catch (e) {
+      _playSteps();
+    } on FormatException catch (e) {
       setState(() {
         _run = null;
-        _error = e.toString().replaceFirst('FormatException: ', '');
+        _error = e.message;
+        _visibleSteps = 0;
+      });
+    } catch (_) {
+      setState(() {
+        _run = null;
+        _error =
+            'Could not simulate these requests. Check the values and try again.';
+        _visibleSteps = 0;
       });
     }
+  }
+
+  void _playSteps() {
+    _stepTimer?.cancel();
+    final run = _run;
+    if (run == null) return;
+    setState(() => _visibleSteps = 0);
+    _stepTimer = Timer.periodic(const Duration(milliseconds: 430), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(
+        () => _visibleSteps = (_visibleSteps + 1)
+            .clamp(0, run.pages.length)
+            .toInt(),
+      );
+      if (_visibleSteps >= run.pages.length) timer.cancel();
+    });
   }
 
   @override
@@ -164,19 +215,30 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
                 items: const ['FIFO', 'LRU', 'Optimal']
                     .map((x) => DropdownMenuItem(value: x, child: Text(x)))
                     .toList(),
-                onChanged: (x) => setState(() => _algorithm = x!),
+                onChanged: (x) {
+                  if (x != null) {
+                    _stepTimer?.cancel();
+                    setState(() {
+                      _algorithm = x;
+                      _run = null;
+                      _visibleSteps = 0;
+                    });
+                  }
+                },
               ),
             ),
             SizedBox(
               width: 120,
               child: TextField(
                 controller: _frames,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  signed: true,
+                ),
                 decoration: const InputDecoration(labelText: 'Frames'),
               ),
             ),
             SizedBox(
-              width: width < 650 ? double.infinity : 560,
+              width: width < 650 ? width - 72 : 560,
               child: TextField(
                 controller: _reference,
                 decoration: const InputDecoration(
@@ -189,7 +251,7 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
             FilledButton.icon(
               onPressed: _simulate,
               icon: const Icon(Icons.play_arrow_rounded),
-              label: const Text('Run simulation'),
+              label: const Text('Run walkthrough'),
             ),
           ],
         ),
@@ -236,7 +298,29 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
             color: Colors.white.withValues(alpha: .48),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _visibleSteps >= run.pages.length
+                    ? 'Walkthrough complete · ${run.pages.length} requests'
+                    : 'Step ${_visibleSteps} of ${run.pages.length} · revealing each page access',
+                style: const TextStyle(
+                  color: AppTheme.cyan,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: _playSteps,
+              tooltip: 'Replay walkthrough',
+              icon: const Icon(Icons.replay_rounded, color: AppTheme.cyan),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
@@ -246,7 +330,7 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
             dataRowMaxHeight: 54,
             columns: [
               const DataColumn(label: Text('FRAME')),
-              for (var i = 0; i < run.pages.length; i++)
+              for (var i = 0; i < _visibleSteps; i++)
                 DataColumn(
                   label: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -281,7 +365,7 @@ class _PageReplacementPageState extends State<PageReplacementPage> {
                         ),
                       ),
                     ),
-                    for (var step = 0; step < run.pages.length; step++)
+                    for (var step = 0; step < _visibleSteps; step++)
                       DataCell(
                         _frameCell(
                           run.snapshots[step][frame],

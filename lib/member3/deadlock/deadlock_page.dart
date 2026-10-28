@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'banker_algorithm.dart';
 
@@ -22,85 +23,146 @@ class _DeadlockPageState extends State<DeadlockPage> {
   );
 
   BankersResult? result;
+  String? errorMessage;
+  int _visibleSequence = 0;
+  Timer? _sequenceTimer;
 
-  List<List<int>> parseMatrix(String input) {
-    return input
-        .split(';')
-        .map(
-          (row) => row
-              .trim()
-              .split(RegExp(r'\s+'))
-              .map((value) => int.parse(value))
-              .toList(),
-        )
-        .toList();
+  List<List<int>> parseMatrix(String input, String field) {
+    if (input.trim().isEmpty) throw FormatException('$field is required.');
+    final rows = input.split(';').map((row) => row.trim()).toList();
+    if (rows.length > 12)
+      throw FormatException('$field can contain at most 12 process rows.');
+    if (rows.any((row) => row.isEmpty))
+      throw FormatException(
+        '$field has an empty row. Separate process rows with semicolons.',
+      );
+    final matrix = <List<int>>[];
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      final tokens = rows[rowIndex].split(RegExp(r'\s+'));
+      if (tokens.length > 8)
+        throw FormatException('$field can use at most 8 resource types.');
+      final row = <int>[];
+      for (var col = 0; col < tokens.length; col++) {
+        final value = int.tryParse(tokens[col]);
+        if (value == null)
+          throw FormatException(
+            '$field: process P${rowIndex + 1}, resource ${col + 1} must be a whole number.',
+          );
+        if (value < 0)
+          throw FormatException(
+            '$field values cannot be negative (P${rowIndex + 1}, resource ${col + 1}).',
+          );
+        if (value > 100000)
+          throw FormatException('$field values must be 100,000 or less.');
+        row.add(value);
+      }
+      matrix.add(row);
+    }
+    return matrix;
   }
 
   List<int> parseVector(String input) {
-    return input
-        .trim()
-        .split(RegExp(r'\s+'))
-        .map((value) => int.parse(value))
-        .toList();
+    if (input.trim().isEmpty)
+      throw const FormatException('Available resources are required.');
+    final tokens = input.trim().split(RegExp(r'\s+'));
+    if (tokens.length > 8)
+      throw const FormatException('Use at most 8 resource values.');
+    return List<int>.generate(tokens.length, (i) {
+      final value = int.tryParse(tokens[i]);
+      if (value == null)
+        throw FormatException(
+          'Available resource ${i + 1} must be a whole number.',
+        );
+      if (value < 0)
+        throw FormatException(
+          'Available resources cannot be negative (value ${i + 1}).',
+        );
+      if (value > 100000)
+        throw const FormatException(
+          'Available resource values must be 100,000 or less.',
+        );
+      return value;
+    });
   }
 
   void runBankersAlgorithm() {
+    _sequenceTimer?.cancel();
     try {
-      final allocation = parseMatrix(allocationController.text);
-      final maximum = parseMatrix(maximumController.text);
+      final allocation = parseMatrix(
+        allocationController.text,
+        'Allocation matrix',
+      );
+      final maximum = parseMatrix(maximumController.text, 'Maximum matrix');
       final available = parseVector(availableController.text);
-
-      if (allocation.isEmpty ||
-          maximum.isEmpty ||
-          available.isEmpty ||
-          allocation.length != maximum.length) {
-        throw Exception();
-      }
-
+      if (allocation.length != maximum.length)
+        throw const FormatException(
+          'Allocation and maximum matrices must have the same number of processes.',
+        );
       final resourceCount = available.length;
-
-      for (final row in allocation) {
-        if (row.length != resourceCount) {
-          throw Exception();
-        }
+      if (allocation.any((row) => row.length != resourceCount) ||
+          maximum.any((row) => row.length != resourceCount)) {
+        throw FormatException(
+          'Each matrix row must contain exactly $resourceCount resource values, matching Available Resources.',
+        );
       }
-
-      for (final row in maximum) {
-        if (row.length != resourceCount) {
-          throw Exception();
-        }
-      }
-
-      for (int i = 0; i < allocation.length; i++) {
-        for (int j = 0; j < resourceCount; j++) {
-          if (allocation[i][j] > maximum[i][j]) {
-            throw Exception();
+      for (var process = 0; process < allocation.length; process++) {
+        for (var resource = 0; resource < resourceCount; resource++) {
+          if (allocation[process][resource] > maximum[process][resource]) {
+            throw FormatException(
+              'Allocation for P${process + 1}, resource ${resource + 1} cannot exceed its maximum claim.',
+            );
           }
         }
       }
-
       final newResult = bankersAlgorithm(
         allocation: allocation,
         maximum: maximum,
         available: available,
       );
-
       setState(() {
         result = newResult;
+        errorMessage = null;
+        _visibleSequence = 0;
       });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter valid matrices with matching dimensions.',
-          ),
-        ),
-      );
+      if (newResult.isSafe) _playSequence();
+    } on FormatException catch (e) {
+      setState(() {
+        result = null;
+        errorMessage = e.message;
+        _visibleSequence = 0;
+      });
+    } catch (_) {
+      setState(() {
+        result = null;
+        errorMessage =
+            'Could not evaluate this resource state. Check the matrices and try again.';
+        _visibleSequence = 0;
+      });
     }
+  }
+
+  void _playSequence() {
+    _sequenceTimer?.cancel();
+    final current = result;
+    if (current == null || !current.isSafe) return;
+    setState(() => _visibleSequence = 0);
+    _sequenceTimer = Timer.periodic(const Duration(milliseconds: 650), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(
+        () => _visibleSequence = (_visibleSequence + 1)
+            .clamp(0, current.safeSequence.length)
+            .toInt(),
+      );
+      if (_visibleSequence >= current.safeSequence.length) timer.cancel();
+    });
   }
 
   @override
   void dispose() {
+    _sequenceTimer?.cancel();
     allocationController.dispose();
     maximumController.dispose();
     availableController.dispose();
@@ -121,11 +183,14 @@ class _DeadlockPageState extends State<DeadlockPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            const Text('Separate processes with ; and resources with spaces.'),
+            const Text(
+              'Use non-negative whole numbers. Separate processes with ; and resource values with spaces.',
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: allocationController,
               maxLines: 3,
+              keyboardType: TextInputType.multiline,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 hintText: '0 1 0; 2 0 0; ...',
@@ -140,6 +205,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
             TextField(
               controller: maximumController,
               maxLines: 3,
+              keyboardType: TextInputType.multiline,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 hintText: '7 5 3; 3 2 2; ...',
@@ -173,6 +239,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
               ),
             ),
             const SizedBox(height: 25),
+            if (errorMessage != null) _errorBanner(),
             if (result != null) buildVisualResult(),
           ],
         ),
@@ -180,6 +247,28 @@ class _DeadlockPageState extends State<DeadlockPage> {
     );
   }
 
+  Widget _errorBanner() => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 16),
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: const Color(0xFF3A1C2B),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFEF7188).withValues(alpha: .4)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Color(0xFFFF8292)),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            errorMessage!,
+            style: const TextStyle(color: Color(0xFFFFB4BF)),
+          ),
+        ),
+      ],
+    ),
+  );
   Widget buildVisualResult() {
     final bool isSafe = result!.isSafe;
 
@@ -238,15 +327,29 @@ class _DeadlockPageState extends State<DeadlockPage> {
 
         // Safe Sequence Timeline Visualizer
         if (isSafe) ...[
-          const Text(
-            'Execution Safe Sequence',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Execution Safe Sequence',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                onPressed: _playSequence,
+                tooltip: 'Replay safe sequence',
+                icon: const Icon(
+                  Icons.replay_rounded,
+                  color: Color(0xFF62F4D4),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: List.generate(result!.safeSequence.length, (index) {
+              children: List.generate(_visibleSequence, (index) {
                 final processId = result!.safeSequence[index];
                 return Row(
                   children: [
