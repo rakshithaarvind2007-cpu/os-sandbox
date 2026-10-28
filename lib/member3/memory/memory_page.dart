@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../member1/app_theme.dart';
 import 'memory_algorithms.dart';
 
 class MemoryPage extends StatefulWidget {
@@ -9,13 +10,11 @@ class MemoryPage extends StatefulWidget {
 }
 
 class _MemoryPageState extends State<MemoryPage> {
-  final blocksController = TextEditingController(
-    text: '100, 500, 200, 300, 600',
-  );
-  final processesController = TextEditingController(text: '212, 417, 112, 426');
-  String selectedAlgorithm = 'First Fit';
-  MemoryAllocationResult? result;
-  String? errorMessage;
+  final _blocks = TextEditingController(text: '100, 500, 200, 300, 600');
+  final _processes = TextEditingController(text: '212, 417, 112, 426');
+  String _algorithm = 'First Fit';
+  MemoryAllocationResult? _result;
+  String? _error;
   int _animationRun = 0;
 
   List<int> _parseSizes(String input, String field) {
@@ -27,117 +26,102 @@ class _MemoryPageState extends State<MemoryPage> {
     for (var i = 0; i < values.length; i++) {
       final size = int.tryParse(values[i]);
       if (size == null)
-        throw FormatException('$field: item ${i + 1} must be a whole number.');
+        throw FormatException('$field item ${i + 1} must be a whole number.');
       if (size <= 0)
-        throw FormatException('$field: sizes must be greater than zero.');
+        throw FormatException('$field sizes must be greater than zero.');
       if (size > 100000)
-        throw FormatException('$field: each size must be 100,000 or less.');
+        throw FormatException('$field values must be 100,000 or less.');
       parsed.add(size);
     }
     return parsed;
   }
 
-  void runAlgorithm() {
+  void _run() {
     HapticFeedback.selectionClick();
     try {
-      final blocks = _parseSizes(blocksController.text, 'Memory blocks');
-      final processes = _parseSizes(processesController.text, 'Process sizes');
-      final allocation = switch (selectedAlgorithm) {
+      final blocks = _parseSizes(_blocks.text, 'Memory blocks');
+      final processes = _parseSizes(_processes.text, 'Process sizes');
+      final result = switch (_algorithm) {
         'First Fit' => firstFit(blocks, processes),
         'Best Fit' => bestFit(blocks, processes),
         _ => worstFit(blocks, processes),
       };
       setState(() {
-        result = allocation;
-        errorMessage = null;
+        _result = result;
+        _error = null;
         _animationRun++;
       });
     } on FormatException catch (e) {
       setState(() {
-        result = null;
-        errorMessage = e.message;
+        _result = null;
+        _error = e.message;
       });
     } catch (_) {
       setState(() {
-        result = null;
-        errorMessage =
-            'Could not run the allocator. Check the values and try again.';
+        _result = null;
+        _error = 'Could not run the allocator. Check the values and try again.';
       });
     }
   }
 
   @override
   void dispose() {
-    blocksController.dispose();
-    processesController.dispose();
+    _blocks.dispose();
+    _processes.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Memory Management')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1050),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _Heading(),
-                const SizedBox(height: 22),
-                _inputCard(),
-                if (result != null) ...[
-                  const SizedBox(height: 22),
-                  _buildVisualResult(),
-                ],
+    final width = MediaQuery.sizeOf(context).width;
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(width < 700 ? 18 : 30),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1150),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _PageHeading(),
+              const SizedBox(height: 22),
+              _inputPanel(width),
+              if (_result != null) ...[
+                const SizedBox(height: 16),
+                _summary(_result!),
+                const SizedBox(height: 16),
+                _allocationView(_result!),
               ],
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _inputCard() {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final fieldWidth = screenWidth < 720
-        ? screenWidth - 100
-        : screenWidth < 1100
-        ? 330.0
-        : 430.0;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111A2B),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF263149)),
-      ),
-      child: Column(
+  Widget _inputPanel(double screenWidth) {
+    final fieldWidth = screenWidth < 700
+        ? screenWidth - 72
+        : screenWidth < 1050
+        ? 320.0
+        : 390.0;
+    return _panel(
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Configure memory',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          const _PanelTitle(
+            'Allocation setup',
+            'Use positive whole-number sizes separated by commas (up to 12 each).',
           ),
-          const SizedBox(height: 5),
-          Text(
-            'Enter positive whole-number sizes, separated by commas (up to 12 each).',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withValues(alpha: .55),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
           Wrap(
-            spacing: 14,
-            runSpacing: 14,
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.end,
             children: [
               SizedBox(
                 width: fieldWidth,
                 child: TextField(
-                  controller: blocksController,
+                  controller: _blocks,
                   keyboardType: const TextInputType.numberWithOptions(
                     signed: true,
                   ),
@@ -150,7 +134,7 @@ class _MemoryPageState extends State<MemoryPage> {
               SizedBox(
                 width: fieldWidth,
                 child: TextField(
-                  controller: processesController,
+                  controller: _processes,
                   keyboardType: const TextInputType.numberWithOptions(
                     signed: true,
                   ),
@@ -161,116 +145,139 @@ class _MemoryPageState extends State<MemoryPage> {
                 ),
               ),
               SizedBox(
-                width: 220,
+                width: 200,
                 child: DropdownButtonFormField<String>(
-                  value: selectedAlgorithm,
+                  value: _algorithm,
                   decoration: const InputDecoration(
                     labelText: 'Placement strategy',
                   ),
                   items: const ['First Fit', 'Best Fit', 'Worst Fit']
                       .map((a) => DropdownMenuItem(value: a, child: Text(a)))
                       .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => selectedAlgorithm = v);
+                  onChanged: (value) {
+                    if (value != null) setState(() => _algorithm = value);
                   },
                 ),
               ),
               FilledButton.icon(
-                onPressed: runAlgorithm,
+                onPressed: _run,
                 icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Allocate processes'),
+                label: const Text('Run allocation'),
               ),
             ],
           ),
-          if (errorMessage != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3A1C2B),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFFEF7188).withValues(alpha: .4),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: Color(0xFFFF8292),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      errorMessage!,
-                      style: const TextStyle(color: Color(0xFFFFB4BF)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            _errorBanner(_error!),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildVisualResult() {
-    final allocation = result!;
-    return Column(
+  Widget _summary(MemoryAllocationResult result) {
+    final total = result.blocks.fold<int>(
+      0,
+      (sum, block) => sum + block.originalSize,
+    );
+    final allocated = result.blocks
+        .expand((block) => block.segments)
+        .where((segment) => segment.isAllocated)
+        .fold<int>(0, (sum, segment) => sum + segment.size);
+    final fragmented = result.blocks
+        .expand((block) => block.segments)
+        .where((segment) => segment.isFragmented)
+        .fold<int>(0, (sum, segment) => sum + segment.size);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _metric('TOTAL MEMORY', '$total units', AppTheme.blue),
+        _metric('ALLOCATED', '$allocated units', AppTheme.cyan),
+        _metric('FRAGMENTATION', '$fragmented units', const Color(0xFFFFB86B)),
+        _metric(
+          'UNALLOCATED',
+          '${result.unallocatedProcesses.length} processes',
+          const Color(0xFFFF7FA6),
+        ),
+      ],
+    );
+  }
+
+  Widget _allocationView(MemoryAllocationResult result) => _panel(
+    Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                '$selectedAlgorithm allocation',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+            const Expanded(
+              child: _PanelTitle(
+                'Memory map',
+                'Each block fills with its assigned process segments.',
               ),
             ),
             IconButton(
               onPressed: () => setState(() => _animationRun++),
               tooltip: 'Replay allocation animation',
-              icon: const Icon(Icons.replay_rounded, color: Color(0xFF62F4D4)),
+              icon: const Icon(Icons.replay_rounded, color: AppTheme.cyan),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 14,
+          runSpacing: 8,
+          children: [
+            _legend('Allocated process', AppTheme.cyan),
+            _legend('Internal fragmentation', const Color(0xFFFFB86B)),
+            _legend('Free space', const Color(0xFF344158)),
+          ],
+        ),
         const SizedBox(height: 14),
-        ...List.generate(allocation.blocks.length, (blockIndex) {
-          final block = allocation.blocks[blockIndex];
+        ...List.generate(result.blocks.length, (index) {
+          final block = result.blocks[index];
           return TweenAnimationBuilder<double>(
             key: ValueKey(
-              '$_animationRun-$selectedAlgorithm-$blockIndex-${block.originalSize}',
+              '$_animationRun-$_algorithm-$index-${block.originalSize}',
             ),
             tween: Tween(begin: 0, end: 1),
-            duration: Duration(milliseconds: 450 + blockIndex * 140),
+            duration: Duration(milliseconds: 420 + index * 110),
             curve: Curves.easeOutCubic,
             builder: (context, progress, child) => Opacity(
               opacity: progress,
               child: Transform.translate(
-                offset: Offset(0, 16 * (1 - progress)),
+                offset: Offset(0, 14 * (1 - progress)),
                 child: child,
               ),
             ),
             child: Container(
               width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 13),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 11),
+              padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
-                color: const Color(0xFF111A2B),
-                borderRadius: BorderRadius.circular(18),
+                color: const Color(0xFF0C1423),
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: const Color(0xFF263149)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Block ${blockIndex + 1}  ·  ${block.originalSize} units',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Block ${index + 1}',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Text(
+                        '${block.originalSize} units',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: .55),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 11),
                   ClipRRect(
@@ -284,15 +291,18 @@ class _MemoryPageState extends State<MemoryPage> {
                               flex: segment.size,
                               child: AnimatedContainer(
                                 duration: Duration(
-                                  milliseconds: 500 + blockIndex * 120,
+                                  milliseconds: 420 + index * 90,
                                 ),
                                 curve: Curves.easeOutCubic,
                                 color: segment.isAllocated
-                                    ? const Color(0xFF62F4D4)
+                                    ? AppTheme.cyan
                                     : segment.isFragmented
                                     ? const Color(0xFFFFB86B)
                                     : const Color(0xFF344158),
                                 alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
                                 child: Text(
                                   segment.label,
                                   maxLines: 1,
@@ -301,7 +311,7 @@ class _MemoryPageState extends State<MemoryPage> {
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     color: segment.isAllocated
-                                        ? const Color(0xFF07111B)
+                                        ? AppTheme.ink
                                         : Colors.white,
                                   ),
                                 ),
@@ -316,53 +326,171 @@ class _MemoryPageState extends State<MemoryPage> {
             ),
           );
         }),
-        if (allocation.unallocatedProcesses.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF3A1C2B),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              'Could not allocate: ${allocation.unallocatedProcesses.map((p) => 'P$p').join(', ')}. Try larger blocks or a different strategy.',
-              style: const TextStyle(
-                color: Color(0xFFFFB4BF),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        if (result.unallocatedProcesses.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          _errorBanner(
+            'Could not allocate ${result.unallocatedProcesses.map((p) => 'P$p').join(', ')}. Try larger blocks or another strategy.',
           ),
+        ],
       ],
-    );
-  }
+    ),
+  );
+
+  Widget _metric(String label, String value, Color color) => Container(
+    width: 205,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFF111A2B),
+      borderRadius: BorderRadius.circular(17),
+      border: Border.all(color: color.withValues(alpha: .23)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            letterSpacing: 1.15,
+            color: color,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+      ],
+    ),
+  );
+  Widget _legend(String label, Color color) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 9,
+        height: 9,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: Colors.white.withValues(alpha: .62),
+        ),
+      ),
+    ],
+  );
+  Widget _errorBanner(String message) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: const Color(0xFF3A1C2B),
+      borderRadius: BorderRadius.circular(13),
+      border: Border.all(color: const Color(0xFFEF7188).withValues(alpha: .4)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Color(0xFFFF8292)),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: Color(0xFFFFB4BF)),
+          ),
+        ),
+      ],
+    ),
+  );
+  Widget _panel(Widget child) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: const Color(0xFF111A2B),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFF263149)),
+    ),
+    child: child,
+  );
 }
 
-class _Heading extends StatelessWidget {
-  const _Heading();
+class _PageHeading extends StatelessWidget {
+  const _PageHeading();
   @override
   Widget build(BuildContext context) => const Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Icon(Icons.storage_rounded, color: Color(0xFFB78CFF), size: 32),
-      SizedBox(width: 12),
+      _HeadingBadge(),
+      SizedBox(width: 15),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'MEMORY ALLOCATION',
+              'MEMORY MANAGEMENT',
               style: TextStyle(
                 fontSize: 10,
-                letterSpacing: 1.5,
-                color: Color(0xFFB78CFF),
+                letterSpacing: 1.6,
+                color: AppTheme.violet,
                 fontWeight: FontWeight.w800,
               ),
             ),
-            SizedBox(height: 4),
+            SizedBox(height: 5),
             Text(
-              'Memory management',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+              'Memory allocation',
+              style: TextStyle(
+                fontSize: 28,
+                letterSpacing: -.6,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              'Compare placement strategies and watch memory blocks fill.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF9DAAC4)),
             ),
           ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _HeadingBadge extends StatelessWidget {
+  const _HeadingBadge();
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 48,
+    height: 48,
+    decoration: BoxDecoration(
+      color: AppTheme.violet.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: const Icon(Icons.storage_rounded, color: AppTheme.violet),
+  );
+}
+
+class _PanelTitle extends StatelessWidget {
+  final String title, subtitle;
+  const _PanelTitle(this.title, this.subtitle);
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.white.withValues(alpha: .48),
         ),
       ),
     ],
