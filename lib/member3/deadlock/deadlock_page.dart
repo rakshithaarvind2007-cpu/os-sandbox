@@ -1,351 +1,724 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../member1/app_theme.dart';
 import 'banker_algorithm.dart';
 
 class DeadlockPage extends StatefulWidget {
   const DeadlockPage({super.key});
-
   @override
   State<DeadlockPage> createState() => _DeadlockPageState();
 }
 
 class _DeadlockPageState extends State<DeadlockPage> {
-  final TextEditingController allocationController = TextEditingController(
+  final _allocation = TextEditingController(
     text: '0 1 0; 2 0 0; 3 0 2; 2 1 1; 0 0 2',
   );
-
-  final TextEditingController maximumController = TextEditingController(
+  final _maximum = TextEditingController(
     text: '7 5 3; 3 2 2; 9 0 2; 2 2 2; 4 3 3',
   );
+  final _available = TextEditingController(text: '3 3 2');
+  BankersResult? _result;
+  String? _error;
+  int _visibleSequence = 0;
+  Timer? _sequenceTimer;
+  List<_BankerStep> _steps = [];
 
-  final TextEditingController availableController = TextEditingController(
-    text: '3 3 2',
-  );
-
-  BankersResult? result;
-
-  List<List<int>> parseMatrix(String input) {
-    return input
-        .split(';')
-        .map(
-          (row) => row
-              .trim()
-              .split(RegExp(r'\s+'))
-              .map((value) => int.parse(value))
-              .toList(),
-        )
-        .toList();
+  List<List<int>> _parseMatrix(String input, String field) {
+    if (input.trim().isEmpty) throw FormatException('$field is required.');
+    final rows = input.split(';').map((row) => row.trim()).toList();
+    if (rows.length > 12)
+      throw FormatException('$field can contain at most 12 process rows.');
+    if (rows.any((row) => row.isEmpty))
+      throw FormatException(
+        '$field has an empty row. Separate process rows with semicolons.',
+      );
+    final matrix = <List<int>>[];
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      final tokens = rows[rowIndex].split(RegExp(r'\s+'));
+      if (tokens.length > 8)
+        throw FormatException('$field can use at most 8 resource types.');
+      final row = <int>[];
+      for (var col = 0; col < tokens.length; col++) {
+        final value = int.tryParse(tokens[col]);
+        if (value == null)
+          throw FormatException(
+            '$field: P${rowIndex + 1}, resource ${col + 1} must be a whole number.',
+          );
+        if (value < 0)
+          throw FormatException(
+            '$field values cannot be negative (P${rowIndex + 1}, resource ${col + 1}).',
+          );
+        if (value > 100000)
+          throw FormatException('$field values must be 100,000 or less.');
+        row.add(value);
+      }
+      matrix.add(row);
+    }
+    return matrix;
   }
 
-  List<int> parseVector(String input) {
-    return input
-        .trim()
-        .split(RegExp(r'\s+'))
-        .map((value) => int.parse(value))
-        .toList();
+  List<int> _parseVector(String input) {
+    if (input.trim().isEmpty)
+      throw const FormatException('Available resources are required.');
+    final tokens = input.trim().split(RegExp(r'\s+'));
+    if (tokens.length > 8)
+      throw const FormatException('Use at most 8 available resource values.');
+    return List<int>.generate(tokens.length, (index) {
+      final value = int.tryParse(tokens[index]);
+      if (value == null)
+        throw FormatException(
+          'Available resource ${index + 1} must be a whole number.',
+        );
+      if (value < 0)
+        throw FormatException(
+          'Available resources cannot be negative (value ${index + 1}).',
+        );
+      if (value > 100000)
+        throw const FormatException(
+          'Available resource values must be 100,000 or less.',
+        );
+      return value;
+    });
   }
 
-  void runBankersAlgorithm() {
+  void _run() {
+    _sequenceTimer?.cancel();
     try {
-      final allocation = parseMatrix(allocationController.text);
-      final maximum = parseMatrix(maximumController.text);
-      final available = parseVector(availableController.text);
-
-      if (allocation.isEmpty ||
-          maximum.isEmpty ||
-          available.isEmpty ||
-          allocation.length != maximum.length) {
-        throw Exception();
-      }
-
+      final allocation = _parseMatrix(_allocation.text, 'Allocation matrix');
+      final maximum = _parseMatrix(_maximum.text, 'Maximum matrix');
+      final available = _parseVector(_available.text);
+      if (allocation.length != maximum.length)
+        throw const FormatException(
+          'Allocation and maximum matrices must have the same number of process rows.',
+        );
       final resourceCount = available.length;
-
-      for (final row in allocation) {
-        if (row.length != resourceCount) {
-          throw Exception();
-        }
+      if (allocation.any((row) => row.length != resourceCount) ||
+          maximum.any((row) => row.length != resourceCount)) {
+        throw FormatException(
+          'Every matrix row must have $resourceCount values to match Available Resources.',
+        );
       }
-
-      for (final row in maximum) {
-        if (row.length != resourceCount) {
-          throw Exception();
-        }
-      }
-
-      for (int i = 0; i < allocation.length; i++) {
-        for (int j = 0; j < resourceCount; j++) {
-          if (allocation[i][j] > maximum[i][j]) {
-            throw Exception();
+      for (var process = 0; process < allocation.length; process++) {
+        for (var resource = 0; resource < resourceCount; resource++) {
+          if (allocation[process][resource] > maximum[process][resource]) {
+            throw FormatException(
+              'Allocation for P${process + 1}, resource ${resource + 1} cannot exceed its maximum claim.',
+            );
           }
         }
       }
-
-      final newResult = bankersAlgorithm(
+      final result = bankersAlgorithm(
         allocation: allocation,
         maximum: maximum,
         available: available,
       );
-
       setState(() {
-        result = newResult;
+        _result = result;
+        var work = List<int>.from(available);
+        _steps = [];
+        for (final process in result.safeSequence) {
+          final before = List<int>.from(work);
+          final released = List<int>.from(allocation[process]);
+          for (var resource = 0; resource < work.length; resource++) {
+            work[resource] += released[resource];
+          }
+          _steps.add(
+            _BankerStep(
+              process: process,
+              need: List<int>.from(result.need[process]),
+              before: before,
+              released: released,
+              after: List<int>.from(work),
+            ),
+          );
+        }
+        _error = null;
+        _visibleSequence = 0;
       });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter valid matrices with matching dimensions.',
-          ),
-        ),
-      );
+      if (result.isSafe) _playSequence();
+    } on FormatException catch (e) {
+      setState(() {
+        _result = null;
+        _error = e.message;
+        _visibleSequence = 0;
+      });
+    } catch (_) {
+      setState(() {
+        _result = null;
+        _error =
+            'Could not evaluate this resource state. Check the matrices and try again.';
+        _visibleSequence = 0;
+      });
     }
+  }
+
+  void _playSequence() {
+    _sequenceTimer?.cancel();
+    final result = _result;
+    if (result == null || !result.isSafe) return;
+    setState(() => _visibleSequence = 0);
+    _sequenceTimer = Timer.periodic(const Duration(milliseconds: 650), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(
+        () => _visibleSequence = (_visibleSequence + 1)
+            .clamp(0, result.safeSequence.length)
+            .toInt(),
+      );
+      if (_visibleSequence >= result.safeSequence.length) timer.cancel();
+    });
   }
 
   @override
   void dispose() {
-    allocationController.dispose();
-    maximumController.dispose();
-    availableController.dispose();
+    _sequenceTimer?.cancel();
+    _allocation.dispose();
+    _maximum.dispose();
+    _available.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Banker's Algorithm Simulator"),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Allocation Matrix',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Separate processes with ; and resources with spaces.',
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: allocationController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '0 1 0; 2 0 0; ...',
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Maximum Matrix',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: maximumController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '7 5 3; 3 2 2; ...',
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Available Resources',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: availableController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '3 3 2',
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: runBankersAlgorithm,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Run Safety Algorithm', style: TextStyle(fontSize: 16)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 25),
-            if (result != null) buildVisualResult(),
-          ],
+    final width = MediaQuery.sizeOf(context).width;
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(width < 700 ? 18 : 30),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1150),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _PageHeading(),
+              const SizedBox(height: 22),
+              _inputPanel(width),
+              if (_result != null) ...[
+                const SizedBox(height: 16),
+                _statusSummary(_result!),
+                const SizedBox(height: 16),
+                _needMatrix(_result!),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget buildVisualResult() {
-    final bool isSafe = result!.isSafe;
+  Widget _inputPanel(double screenWidth) {
+    final matrixWidth = screenWidth < 700
+        ? screenWidth - 72
+        : screenWidth < 1050
+        ? 390.0
+        : 470.0;
+    return _panel(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _PanelTitle(
+            'Resource state',
+            'Use non-negative whole numbers. Separate process rows with ; and resources with spaces.',
+          ),
+          const SizedBox(height: 15),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              SizedBox(
+                width: matrixWidth,
+                child: TextField(
+                  controller: _allocation,
+                  maxLines: 3,
+                  keyboardType: TextInputType.multiline,
+                  decoration: const InputDecoration(
+                    labelText: 'Allocation matrix',
+                    hintText: '0 1 0; 2 0 0; ...',
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: matrixWidth,
+                child: TextField(
+                  controller: _maximum,
+                  maxLines: 3,
+                  keyboardType: TextInputType.multiline,
+                  decoration: const InputDecoration(
+                    labelText: 'Maximum matrix',
+                    hintText: '7 5 3; 3 2 2; ...',
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 280,
+                child: TextField(
+                  controller: _available,
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(
+                    labelText: 'Available resources',
+                    hintText: '3 3 2',
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _run,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Check safety'),
+              ),
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            _errorBanner(_error!),
+          ],
+        ],
+      ),
+    );
+  }
 
+  Widget _statusSummary(BankersResult result) {
+    final safe = result.isSafe;
+    final accent = safe ? AppTheme.cyan : const Color(0xFFFF7FA6);
+    final completed = result.safeSequence.length;
+    final blocked = List<int>.generate(
+      result.need.length,
+      (i) => i,
+    ).where((i) => !result.safeSequence.contains(i)).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // System Status Card
-        Card(
-          color: isSafe ? Colors.green.shade50 : Colors.red.shade50,
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  isSafe ? Icons.check_circle : Icons.warning_amber_rounded,
-                  color: isSafe ? Colors.green.shade700 : Colors.red.shade700,
-                  size: 32,
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _metric(
+              'SYSTEM STATE',
+              safe ? 'SAFE' : 'UNSAFE',
+              accent,
+              safe ? Icons.verified_rounded : Icons.warning_amber_rounded,
+            ),
+            _metric(
+              'PROCESSES',
+              '${result.need.length}',
+              AppTheme.blue,
+              Icons.memory_rounded,
+            ),
+            _metric(
+              'SAFE ORDER',
+              safe ? '$completed steps' : '$completed of ${result.need.length}',
+              AppTheme.violet,
+              Icons.account_tree_rounded,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _panel(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: .13),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      safe ? Icons.check_rounded : Icons.priority_high_rounded,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          safe
+                              ? 'Safe state found'
+                              : 'No complete safe sequence',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          safe
+                              ? 'The sequence below releases resources as each process finishes.'
+                              : 'These processes remain blocked with the current available resources.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: .5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (safe)
+                    IconButton(
+                      onPressed: _playSequence,
+                      tooltip: 'Replay safe sequence',
+                      icon: const Icon(
+                        Icons.replay_rounded,
+                        color: AppTheme.cyan,
+                      ),
+                    ),
+                ],
+              ),
+              if (safe) ...[
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _visibleSequence >= result.safeSequence.length
+                            ? 'Safe execution sequence'
+                            : 'Execution steps · $_visibleSequence of ${result.safeSequence.length}',
+                        style: const TextStyle(
+                          color: AppTheme.cyan,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: AppTheme.cyan,
+                      size: 16,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 11),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
                     children: [
-                      Text(
-                        isSafe ? 'System Status: SAFE' : 'System Status: DEADLOCK / UNSAFE',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isSafe ? Colors.green.shade900 : Colors.red.shade900,
+                      for (
+                        var index = 0;
+                        index < _visibleSequence;
+                        index++
+                      ) ...[
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: .75, end: 1),
+                          duration: const Duration(milliseconds: 360),
+                          curve: Curves.easeOutBack,
+                          builder: (context, scale, child) =>
+                              Transform.scale(scale: scale, child: child),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.cyan.withValues(alpha: .11),
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(
+                                color: AppTheme.cyan.withValues(alpha: .3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    color: AppTheme.cyan.withValues(alpha: .7),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'P${result.safeSequence[index] + 1}',
+                                  style: const TextStyle(
+                                    color: AppTheme.cyan,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isSafe
-                            ? 'A safe execution sequence exists to prevent deadlock.'
-                            : 'The current resource allocation cannot guarantee process completion.',
-                        style: TextStyle(
-                          color: isSafe ? Colors.green.shade800 : Colors.red.shade800,
-                        ),
-                      ),
+                        if (index < _visibleSequence - 1)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(
+                              Icons.arrow_forward_rounded,
+                              color: Color(0xFF526078),
+                              size: 18,
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // Safe Sequence Timeline Visualizer
-        if (isSafe) ...[
-          const Text(
-            'Execution Safe Sequence',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(result!.safeSequence.length, (index) {
-                final processId = result!.safeSequence[index];
-                return Row(
-                  children: [
-                    Chip(
-                      avatar: CircleAvatar(
-                        backgroundColor: Colors.blue.shade700,
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                      label: Text(
-                        'P$processId',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      backgroundColor: Colors.blue.shade50,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                    if (index < result!.safeSequence.length - 1)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Colors.blue.shade400,
-                          size: 20,
-                        ),
-                      ),
-                  ],
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-
-        // Need Matrix Table
-        const Text(
-          'Computed Need Matrix [Max - Allocation]',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          elevation: 1,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Table(
-              border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-              children: [
-                TableRow(
-                  backgroundColor: Colors.grey.shade100,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('Process', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    ...List.generate(
-                      result!.need.isNotEmpty ? result!.need[0].length : 0,
-                      (resIndex) => Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          'R$resIndex',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ],
+                if (_visibleSequence > 0 && _steps.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _stepCard(_steps[_visibleSequence - 1]),
+                ],
+              ] else ...[
+                const SizedBox(height: 15),
+                _errorBanner(
+                  'Blocked: ${blocked.map((i) => 'P$i').join(', ')} cannot finish with the resources currently available.',
                 ),
-                ...List.generate(result!.need.length, (pIndex) {
-                  return TableRow(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          'P$pIndex',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      ...result!.need[pIndex].map(
-                        (val) => Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            '$val',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
               ],
-            ),
+            ],
           ),
         ),
       ],
     );
   }
+
+  Widget _stepCard(_BankerStep step) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 400),
+    child: Container(
+      key: ValueKey(step.process),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1423),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.cyan.withValues(alpha: .3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STEP $_visibleSequence · P${step.process + 1} FINISHES',
+            style: const TextStyle(
+              color: AppTheme.cyan,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Need ${step.need} is within Work ${step.before}. The process releases ${step.released}, making Work ${step.after}.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .7),
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _needMatrix(BankersResult result) => _panel(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PanelTitle(
+          'Need matrix',
+          'Remaining resources each process needs to finish · Maximum − Allocation.',
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: const WidgetStatePropertyAll(Color(0xFF18243A)),
+            dataRowColor: const WidgetStatePropertyAll(Color(0xFF0C1423)),
+            dividerThickness: .5,
+            columns: [
+              const DataColumn(label: Text('PROCESS')),
+              for (var r = 0; r < result.need.first.length; r++)
+                DataColumn(label: Text('R$r')),
+            ],
+            rows: [
+              for (var p = 0; p < result.need.length; p++)
+                DataRow(
+                  cells: [
+                    DataCell(
+                      Text(
+                        'P$p',
+                        style: const TextStyle(
+                          color: AppTheme.blue,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    for (final value in result.need[p])
+                      DataCell(Text('$value')),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _metric(String title, String value, Color accent, IconData icon) =>
+      Container(
+        width: 205,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111A2B),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: accent.withValues(alpha: .23)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 18, color: accent),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 1,
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+  Widget _errorBanner(String message) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: const Color(0xFF3A1C2B),
+      borderRadius: BorderRadius.circular(13),
+      border: Border.all(color: const Color(0xFFEF7188).withValues(alpha: .4)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Color(0xFFFF8292)),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: Color(0xFFFFB4BF)),
+          ),
+        ),
+      ],
+    ),
+  );
+  Widget _panel(Widget child) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: const Color(0xFF111A2B),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFF263149)),
+    ),
+    child: child,
+  );
+}
+
+class _PageHeading extends StatelessWidget {
+  const _PageHeading();
+  @override
+  Widget build(BuildContext context) => const Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _HeadingBadge(),
+      SizedBox(width: 15),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'DEADLOCK AVOIDANCE',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.6,
+                color: AppTheme.violet,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              "Banker's algorithm",
+              style: TextStyle(
+                fontSize: 28,
+                letterSpacing: -.6,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              'Check whether the system can safely satisfy every process.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF9DAAC4)),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _HeadingBadge extends StatelessWidget {
+  const _HeadingBadge();
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 48,
+    height: 48,
+    decoration: BoxDecoration(
+      color: AppTheme.violet.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: const Icon(Icons.account_tree_rounded, color: AppTheme.violet),
+  );
+}
+
+class _PanelTitle extends StatelessWidget {
+  final String title, subtitle;
+  const _PanelTitle(this.title, this.subtitle);
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.white.withValues(alpha: .48),
+        ),
+      ),
+    ],
+  );
+}
+
+class _BankerStep {
+  final int process;
+  final List<int> need, before, released, after;
+  const _BankerStep({
+    required this.process,
+    required this.need,
+    required this.before,
+    required this.released,
+    required this.after,
+  });
 }
