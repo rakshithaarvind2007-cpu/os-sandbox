@@ -204,137 +204,173 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  Widget _allocationView(MemoryAllocationResult result) => _panel(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: _PanelTitle(
-                'Memory map',
-                'Each block fills with its assigned process segments.',
+  Widget _allocationView(MemoryAllocationResult result) {
+    const palette = [
+      AppTheme.cyan,
+      AppTheme.blue,
+      AppTheme.violet,
+      Color(0xFFFF7FA6),
+      Color(0xFF72D1FF),
+    ];
+    return _panel(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: _PanelTitle(
+                  'Live RAM map',
+                  'RAM availability scales this teaching workload; blocks fill top to bottom.',
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: () => setState(() => _animationRun++),
-              tooltip: 'Replay allocation animation',
-              icon: const Icon(Icons.replay_rounded, color: AppTheme.cyan),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 14,
-          runSpacing: 8,
-          children: [
-            _legend('Allocated process', AppTheme.cyan),
-            _legend('Internal fragmentation', const Color(0xFFFFB86B)),
-            _legend('Free space', const Color(0xFF344158)),
-          ],
-        ),
-        const SizedBox(height: 14),
-        ...List.generate(result.blocks.length, (index) {
-          final block = result.blocks[index];
-          return TweenAnimationBuilder<double>(
-            key: ValueKey(
-              '$_animationRun-$_algorithm-$index-${block.originalSize}',
-            ),
-            tween: Tween(begin: 0, end: 1),
-            duration: Duration(milliseconds: 420 + index * 110),
-            curve: Curves.easeOutCubic,
-            builder: (context, progress, child) => Opacity(
-              opacity: progress,
-              child: Transform.translate(
-                offset: Offset(0, 14 * (1 - progress)),
-                child: child,
+              IconButton(
+                onPressed: () => setState(() => _animationRun++),
+                tooltip: 'Replay animation',
+                icon: const Icon(Icons.replay_rounded, color: AppTheme.cyan),
               ),
-            ),
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 11),
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0C1423),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFF263149)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            children: [
+              _legend('Process allocation', AppTheme.cyan),
+              _legend('Internal fragmentation', const Color(0xFFFFB86B)),
+              _legend('Free space', const Color(0xFF344158)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 330,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Block ${index + 1}',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
+                  for (var i = 0; i < result.blocks.length; i++)
+                    TweenAnimationBuilder<double>(
+                      key: ValueKey('$_animationRun-$_algorithm-$i'),
+                      tween: Tween(begin: .82, end: 1),
+                      duration: Duration(milliseconds: 450 + i * 100),
+                      curve: Curves.easeOutBack,
+                      builder: (context, scale, child) => Transform.scale(
+                        scale: scale,
+                        alignment: Alignment.bottomCenter,
+                        child: child,
                       ),
-                      Text(
-                        '${block.originalSize} units',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: .55),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 11),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(9),
-                    child: SizedBox(
-                      height: 42,
-                      child: Row(
-                        children: [
-                          for (final segment in block.segments)
-                            Expanded(
-                              flex: segment.size,
-                              child: AnimatedContainer(
-                                duration: Duration(
-                                  milliseconds: 420 + index * 90,
-                                ),
-                                curve: Curves.easeOutCubic,
-                                color: segment.isAllocated
-                                    ? AppTheme.cyan
-                                    : segment.isFragmented
-                                    ? const Color(0xFFFFB86B)
-                                    : const Color(0xFF344158),
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: Text(
-                                  segment.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: segment.isAllocated
-                                        ? AppTheme.ink
-                                        : Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                      child: _ramBlock(i, result.blocks[i], palette),
                     ),
-                  ),
                 ],
               ),
             ),
-          );
-        }),
-        if (result.unallocatedProcesses.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          _errorBanner(
-            'Could not allocate ${result.unallocatedProcesses.map((p) => 'P$p').join(', ')}. Try larger blocks or another strategy.',
+          ),
+          if (result.unallocatedProcesses.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _errorBanner(
+              'Could not allocate ${result.unallocatedProcesses.map((p) => 'P$p').join(', ')}. Try larger blocks or another strategy.',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _ramBlock(int index, MemoryBlockState block, List<Color> palette) {
+    final allocated = block.segments
+        .where((s) => s.isAllocated)
+        .fold<int>(0, (sum, s) => sum + s.size);
+    return Container(
+      width: 154,
+      margin: const EdgeInsets.only(right: 11),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1423),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF263149)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'BLOCK ${index + 1}',
+            style: const TextStyle(
+              fontSize: 9,
+              letterSpacing: 1.1,
+              color: AppTheme.blue,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            '${block.originalSize} units',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 9),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Column(
+                children: [
+                  for (final segment in block.segments)
+                    Expanded(
+                      flex: segment.size,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 480),
+                        curve: Curves.easeOutCubic,
+                        width: double.infinity,
+                        color: segment.isFragmented
+                            ? const Color(0xFFFFB86B)
+                            : !segment.isAllocated
+                            ? const Color(0xFF344158)
+                            : palette[(int.tryParse(
+                                        RegExp(r'^P(\d+)')
+                                                .firstMatch(segment.label)
+                                                ?.group(1) ??
+                                            '1',
+                                      )! -
+                                      1) %
+                                  palette.length],
+                        alignment: Alignment.center,
+                        child: segment.size / block.originalSize > .1
+                            ? Text(
+                                segment.label.split(' ').first,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: segment.isAllocated
+                                      ? AppTheme.ink
+                                      : Colors.white,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: allocated / block.originalSize,
+              minHeight: 5,
+              backgroundColor: const Color(0xFF29364B),
+              valueColor: const AlwaysStoppedAnimation(AppTheme.cyan),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '${(allocated * 100 / block.originalSize).round()}% allocated',
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.white.withValues(alpha: .55),
+            ),
           ),
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   Widget _metric(String label, String value, Color color) => Container(
     width: 205,

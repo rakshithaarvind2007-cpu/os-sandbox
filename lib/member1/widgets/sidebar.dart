@@ -109,6 +109,13 @@ class Sidebar extends StatelessWidget {
                 label: 'Disk Scheduling',
               ),
 
+              _navItem(
+                context,
+                index: 6,
+                icon: Icons.science_rounded,
+                label: 'System Sandbox',
+              ),
+
               const SizedBox(height: 24),
               const Divider(),
 

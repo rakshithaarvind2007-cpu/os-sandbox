@@ -8,6 +8,7 @@ import '../member2/page_replacement/page_replacement_page.dart';
 import '../member3/memory/memory_page.dart';
 import '../member3/deadlock/deadlock_page.dart';
 import '../member3/disk/disk_page.dart';
+import 'sandbox_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -40,6 +41,7 @@ class _HomePageState extends State<HomePage>
     3 => const MemoryPage(),
     4 => const DeadlockPage(),
     5 => const DiskPage(),
+    6 => const SandboxPage(),
     _ => _dashboard(),
   };
 
@@ -91,6 +93,14 @@ class _HomePageState extends State<HomePage>
         'FCFS · SSTF · SCAN · C-SCAN · LOOK',
         5,
       ),
+      _ModuleInfo(
+        'System Sandbox',
+        'Run one workload across CPU, memory, and I/O policies.',
+        Icons.science_rounded,
+        AppTheme.cyan,
+        'Live device profile · controls · policy comparisons',
+        6,
+      ),
     ];
     return AnimatedBuilder(
       animation: _ambient,
@@ -114,7 +124,7 @@ class _HomePageState extends State<HomePage>
                     const _SectionLabel('SIMULATION MODULES'),
                     const Spacer(),
                     Text(
-                      '05 interactive labs',
+                      '05 focused labs + shared sandbox',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: .48),
                         fontSize: 12,
@@ -309,6 +319,7 @@ class _HomePageState extends State<HomePage>
     'Memory management',
     'Deadlock lab',
     'Disk scheduling',
+    'System Sandbox',
   ][_selectedIndex];
 
   @override

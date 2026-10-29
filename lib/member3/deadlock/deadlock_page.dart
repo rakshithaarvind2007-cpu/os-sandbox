@@ -21,6 +21,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
   String? _error;
   int _visibleSequence = 0;
   Timer? _sequenceTimer;
+  List<_BankerStep> _steps = [];
 
   List<List<int>> _parseMatrix(String input, String field) {
     if (input.trim().isEmpty) throw FormatException('$field is required.');
@@ -113,6 +114,24 @@ class _DeadlockPageState extends State<DeadlockPage> {
       );
       setState(() {
         _result = result;
+        var work = List<int>.from(available);
+        _steps = [];
+        for (final process in result.safeSequence) {
+          final before = List<int>.from(work);
+          final released = List<int>.from(allocation[process]);
+          for (var resource = 0; resource < work.length; resource++) {
+            work[resource] += released[resource];
+          }
+          _steps.add(
+            _BankerStep(
+              process: process,
+              need: List<int>.from(result.need[process]),
+              before: before,
+              released: released,
+              after: List<int>.from(work),
+            ),
+          );
+        }
         _error = null;
         _visibleSequence = 0;
       });
@@ -415,7 +434,7 @@ class _DeadlockPageState extends State<DeadlockPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'P${result.safeSequence[index]}',
+                                  'P${result.safeSequence[index] + 1}',
                                   style: const TextStyle(
                                     color: AppTheme.cyan,
                                     fontWeight: FontWeight.w800,
@@ -438,6 +457,10 @@ class _DeadlockPageState extends State<DeadlockPage> {
                     ],
                   ),
                 ),
+                if (_visibleSequence > 0 && _steps.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _stepCard(_steps[_visibleSequence - 1]),
+                ],
               ] else ...[
                 const SizedBox(height: 15),
                 _errorBanner(
@@ -450,6 +473,39 @@ class _DeadlockPageState extends State<DeadlockPage> {
       ],
     );
   }
+
+  Widget _stepCard(_BankerStep step) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 400),
+    child: Container(
+      key: ValueKey(step.process),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1423),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.cyan.withValues(alpha: .3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STEP $_visibleSequence · P${step.process + 1} FINISHES',
+            style: const TextStyle(
+              color: AppTheme.cyan,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Need ${step.need} is within Work ${step.before}. The process releases ${step.released}, making Work ${step.after}.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .7),
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _needMatrix(BankersResult result) => _panel(
     Column(
@@ -653,4 +709,16 @@ class _PanelTitle extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _BankerStep {
+  final int process;
+  final List<int> need, before, released, after;
+  const _BankerStep({
+    required this.process,
+    required this.need,
+    required this.before,
+    required this.released,
+    required this.after,
+  });
 }

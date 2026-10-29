@@ -17,6 +17,7 @@ class _CpuPageState extends State<CpuPage> {
   String _algorithm = 'SRTF';
   SchedulingResult? _result;
   List<_Block> _blocks = [];
+  List<_QueueFrame> _queueFrames = [];
   String? _error;
   int _revealedBlocks = 0;
   Timer? _timelineTimer;
@@ -117,9 +118,11 @@ class _CpuPageState extends State<CpuPage> {
           remain[id] = remain[id]! - duration;
         }
       }
+      final queueFrames = _buildQueueFrames(processes, blocks);
       setState(() {
         _result = result;
         _blocks = blocks;
+        _queueFrames = queueFrames;
         _revealedBlocks = 0;
         _error = null;
       });
@@ -128,12 +131,14 @@ class _CpuPageState extends State<CpuPage> {
       setState(() {
         _result = null;
         _blocks = [];
+        _queueFrames = [];
         _error = e.message;
       });
     } catch (_) {
       setState(() {
         _result = null;
         _blocks = [];
+        _queueFrames = [];
         _error =
             'Could not schedule these processes. Check the input values and try again.';
       });
@@ -166,6 +171,72 @@ class _CpuPageState extends State<CpuPage> {
     }
   }
 
+  List<_QueueFrame> _buildQueueFrames(List<Process> ps, List<_Block> blocks) {
+    final left = {for (final p in ps) p.id: p.burstTime};
+    final frames = <_QueueFrame>[];
+    final rrQueue = <String>[];
+    final admitted = <String>{};
+    void admit(int time) {
+      final arrivals = ps.where((p) => p.arrivalTime <= time && !admitted.contains(p.id)).toList()
+        ..sort((a, b) {
+          final arrival = a.arrivalTime.compareTo(b.arrivalTime);
+          return arrival != 0 ? arrival : a.id.compareTo(b.id);
+        });
+      for (final p in arrivals) {
+        admitted.add(p.id);
+        rrQueue.add(p.id);
+      }
+    }
+    for (final b in blocks) {
+      final ready = ps.where((p) => p.id != b.id && p.arrivalTime <= b.start && left[p.id]! > 0).toList();
+      int order(Process a, Process b) {
+        if (_algorithm == 'SJF') return a.burstTime.compareTo(b.burstTime);
+        if (_algorithm == 'SRTF') return left[a.id]!.compareTo(left[b.id]!);
+        if (_algorithm == 'Priority') return a.priority.compareTo(b.priority);
+        final arrival = a.arrivalTime.compareTo(b.arrivalTime);
+        return arrival != 0 ? arrival : a.id.compareTo(b.id);
+      }
+      ready.sort(order);
+      if (_algorithm == 'Round Robin') {
+        admit(b.start);
+        rrQueue.remove(b.id);
+        ready
+          ..clear()
+          ..addAll(rrQueue.map((id) => ps.firstWhere((p) => p.id == id)));
+      }
+      final upcoming = ps.where((p) => p.arrivalTime > b.start && left[p.id]! > 0).toList()..sort((a,b)=>a.arrivalTime.compareTo(b.arrivalTime));
+      frames.add(_QueueFrame(time:b.start,running:b.id,ready:[for(final p in ready) (p.id,left[p.id]!)],upcoming:[for(final p in upcoming) p.id]));
+      left[b.id]=left[b.id]!-(b.end-b.start);
+      if (_algorithm == 'Round Robin') {
+        admit(b.end);
+        if (left[b.id]! > 0) rrQueue.add(b.id);
+      }
+    }
+    return frames;
+  }
+  Widget _readyQueue() {
+    if (_revealedBlocks == 0 || _queueFrames.isEmpty) return _panel(child: const Text('Ready queue appears as the timeline plays.'));
+    final frame=_queueFrames[(_revealedBlocks-1).clamp(0,_queueFrames.length-1).toInt()];
+    return _panel(child: Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _PanelTitle('Ready queue - t='+frame.time.toString(),'Processes waiting for the CPU update with each animated dispatch.'),
+      const SizedBox(height:12),
+      Wrap(spacing:8,runSpacing:8,children:[
+        _queueChip('RUNNING',frame.running,AppTheme.cyan),
+        for (var i = 0; i < frame.ready.length; i++)
+          _queueChip('READY ' + (i + 1).toString() + ' remaining', frame.ready[i].$1, AppTheme.blue),
+        for(final id in frame.upcoming) _queueChip('ARRIVES LATER',id,AppTheme.violet),
+        if(frame.ready.isEmpty&&frame.upcoming.isEmpty) const Text('No other process is waiting.',style:TextStyle(color:Colors.white54,fontSize:11)),
+      ]),
+    ]));
+  }
+  Widget _queueChip(String label,String id,Color color)=>AnimatedContainer(
+    duration:const Duration(milliseconds:300),padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
+    decoration:BoxDecoration(color:color.withValues(alpha:.1),border:Border.all(color:color.withValues(alpha:.35)),borderRadius:BorderRadius.circular(10)),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(label,style:TextStyle(fontSize:8,letterSpacing:.7,color:color,fontWeight:FontWeight.w800)),
+      const SizedBox(height:3),Text(id,style:const TextStyle(fontSize:11,fontWeight:FontWeight.w700)),
+    ]),
+  );
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
@@ -375,6 +446,8 @@ class _CpuPageState extends State<CpuPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                _readyQueue(),
+                const SizedBox(height: 16),
                 _panel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,6 +528,13 @@ class _CpuPageState extends State<CpuPage> {
       const TextStyle(fontSize: 9, color: Colors.white54);
 }
 
+class _QueueFrame {
+  final int time;
+  final String running;
+  final List<(String,int)> ready;
+  final List<String> upcoming;
+  const _QueueFrame({required this.time,required this.running,required this.ready,required this.upcoming});
+}
 class _Block {
   final String id;
   final int start;
@@ -484,7 +564,7 @@ class _TimelineSegment extends StatelessWidget {
     required this.width,
     required this.index,
   });
-  @override
+    @override
   Widget build(BuildContext context) {
     final left = width * block.start / total;
     final w = (width * (block.end - block.start) / total).clamp(22.0, width);
